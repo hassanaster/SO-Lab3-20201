@@ -2,34 +2,54 @@
  * @defgroup   SAXPY saxpy
  *
  * @brief      This file implements an iterative saxpy operation
+ * @brief      Update V0: we created the n threads without assign the workload to each threat with a lock in the clitical code
  * 
  * @param[in] <-p> {vector size} 
  * @param[in] <-s> {seed}
  * @param[in] <-n> {number of threads to create} 
  * @param[in] <-i> {maximum itertions} 
  *
- * @author     Danny Munera
+ * @author     Danny Munera V0
+ * @date       2020
+ * @author     Miriam Arango, Yesison Quinto, Luisa V1
  * @date       2020
  */
+
+
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <sys/time.h>
+#include <pthread.h>
+#include <sys/sem.h>
+#include <semaphore.h>
+#include <time.h>
+
+
+// Variables to obtain command line parameters
+int p = 10000000; // vector size
+int n_threads = 2; // {number of threads to create} 
+int max_iters = 1000;
+
+// Variables to perform SAXPY operation
+double* X;
+double a;
+double* Y;
+double* Y_avgs;
+int i, it;
+//Lock to ensure a non-race condition
+pthread_mutex_t mutex;
+
+
+void* saxpy(void* arg);
+
 
 int main(int argc, char* argv[]){
 	// Variables to obtain command line parameters
-	unsigned int seed = 1; // this is to generate the ramdom numbers
-  	int p = 10000000; // vector size
-  	int n_threads = 2; // {number of threads to create} 
-  	int max_iters = 1000; 
-  	// Variables to perform SAXPY operation
-	double* X;
-	double a;
-	double* Y;
-	double* Y_avgs;
-	int i, it;
+	unsigned int seed = 1; // this is to generate the ramdom numbers for each vector
+  	
 	// Variables to get execution time
 	struct timeval t_start, t_end;
 	double exec_time;
@@ -56,14 +76,14 @@ int main(int argc, char* argv[]){
 			max_iters = strtol(optarg, NULL, 10);
 			break;  
 			case ':':  
-			printf("option -%c needs a value\n", optopt);   
+			printf("option -%c needs a value\n", optopt);   //optopt ?
 			break;  
 			case '?':  
 			fprintf(stderr, "Usage: %s [-p <vector size>] [-s <seed>] [-n <threads number>]\n", argv[0]);
 			exit(EXIT_FAILURE);
 		}  
 	}  
-	srand(seed); //Strand?
+	srand(seed); 
 
 	printf("p = %d, seed = %d, n_threads = %d, max_iters = %d\n", \
 	 p, seed, n_threads, max_iters);	
@@ -82,7 +102,7 @@ int main(int argc, char* argv[]){
 	}
 	a = (double)rand() / RAND_MAX;
 
-//DEBUG??
+//DEBUG
 #ifdef DEBUG
 	printf("vector X= [ ");
 	for(i = 0; i < p-1; i++){
@@ -99,18 +119,15 @@ int main(int argc, char* argv[]){
 	printf("a= %f \n", a);	
 #endif
 
-	/*
-	 *	Function to parallelize 
-	 */
+	
 	gettimeofday(&t_start, NULL);
-	//SAXPY iterative SAXPY mfunction
-	for(it = 0; it < max_iters; it++){
-		for(i = 0; i < p; i++){
-			Y[i] = Y[i] + a * X[i];
-			Y_avgs[it] += Y[i];
-		}
-		Y_avgs[it] = Y_avgs[it] / p;
-	}
+	
+
+	pthread_t h[n_threads];
+    for (i=0; i<n_threads;i++) {
+        pthread_create (&h[i], NULL, *saxpy, NULL);
+        pthread_join (h[i], NULL);
+    }
 	gettimeofday(&t_end, NULL);
 
 #ifdef DEBUG
@@ -129,3 +146,22 @@ int main(int argc, char* argv[]){
 	printf("Last 3 values of Y_avgs: %f, %f, %f \n", Y_avgs[max_iters-3], Y_avgs[max_iters-2], Y_avgs[max_iters-1]);
 	return 0;
 }	
+
+/*
+*	Function to parallelize 
+*/
+
+//SAXPY iterative SAXPY mfunction with the lock in the critical code
+
+void* saxpy(void* arg){
+    for(it = 0; it < max_iters; it++){
+		pthread_mutex_lock(&mutex);
+        for(i = 0; i < p; i++){
+            Y[i] = Y[i] + a * X[i];
+			Y_avgs[it] += Y[i];
+            pthread_mutex_unlock(&mutex);
+		}
+		Y_avgs[it] = Y_avgs[it] / p;
+	}
+    pthread_exit(NULL);
+}
