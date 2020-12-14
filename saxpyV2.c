@@ -51,8 +51,6 @@ int start;
 int end = -1;
 
 void* saxpy(void* arg);
-/*void jobQuantity(void *arg);*/
-
 
 int main(int argc, char* argv[]){
 	// Variables to obtain command line parameters
@@ -181,22 +179,17 @@ void* saxpy(void* arg){
     struct jobThread *jobT;
     jobT = (struct jobThread *)arg;
     for(it = 0; it < max_iters; it++){
-		pthread_mutex_lock(&mutex);
 		jobT->startPosition=0;
         for(i = jobT->startPosition; i <=jobT->endPosition; i++){
-            jobT->startPosition=i;
+			jobT->startPosition=i;
 			//printf("i: %d\n", i);
             Y[i] = Y[i] + a * X[i];
 			Y_avgs[it] += Y[i];
+		
 		}
-		Y_avgs[it] += Y_avgs[it] / p;
+		pthread_mutex_lock(&mutex);
+		Y_avgs[it] = Y_avgs[it] / p;
 		pthread_mutex_unlock(&mutex);
 	}
     pthread_exit(NULL);
 }
-
-/*void jobQuantity(void *arg){
-    struct jobThread *jobT;
-    jobT = (struct jobThread *)arg;
-	
-}*/
